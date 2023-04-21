@@ -1,14 +1,273 @@
 % !TeX root = ../index.tex
 
-\section{Introduction}
+\section{Setup}
 
-\blindtext[2]
-\footcite[]{smith2010wealth}
+The setup for this lab consists of three virtual machines.
+Two running Ubuntu 16.04 and one running Ubuntu 22.04.
 
-\begin{wrapfigure}{l}{0.4\textwidth}
+\begin{table}[H]
   \centering
-  \includegraphics[width=0.35\textwidth]{threepwood.png}
-  \caption{The Greatest Pirate in the World}\label{fig:threepwood}
-\end{wrapfigure}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Host} & \textbf{IP}    & \textbf{OS}  \\
+    \hline
+    sieverding-0  & 141.72.188.55  & Ubuntu 22.04 \\
+    \hline
+    sieverding-1  & 141.72.188.143 & Ubuntu 16.04 \\
+    \hline
+    sieverding-2  & 141.72.188.140 & Ubuntu 16.04 \\
+    \hline
+  \end{tabular}
+  \caption{Overview of virtual machines}
+\end{table}
 
-\blindtext[2]
+\section{Getting Software on Your System}\label{sec:installation}
+
+In this exercise we install the open source version of Tripwire---a security tool that can be used to compare the state of a file system against a base line.
+For the purpose of later exercises, we do this on machine 2 (sieverding-1).
+
+\begin{enumerate}
+  \item Install the required dependencies.
+
+        \begin{minted}{text}
+          $ sudo apt update
+          $ sudo apt install build-essential git
+        \end{minted}
+
+  \item Clone the source of Tripwire from GitHub.
+
+        \begin{minted}{text}
+          $ git clone https://github.com/Tripwire/tripwire-open-source
+          $ cd tripwire-open-source
+        \end{minted}
+
+  \item Build the project according to the instructions in \texttt{README.md}.
+
+        \begin{enumerate}
+          \item Execute \texttt{touchconfig.sh} to prevent errors around autoconf/automake.
+
+                \begin{minted}{text}
+                  $ ./touchconfig.sh
+                \end{minted}
+
+          \item Build the project.
+
+                \begin{minted}{text}
+                  $ CXXFLAGS="$CXXFLAGS -std=c++14" ./configure
+                  $ make
+                \end{minted}
+
+                In my setup, I had to specify that the C++ compiler should use C++ 14 as the standard, since otherwise it would try to use C++ 17 which caused problems.
+
+          \item The \texttt{bin} directory should now contain the built binaries.
+
+          \item Install the binaries to your system.
+
+                \begin{minted}{text}
+                  $ sudo make install
+                \end{minted}
+
+                In the process of installing you are asked to read and accept the license agreement.
+                The setup also asks for passwords to sign the program's database and configuration files.
+                This is important to prevent attackers from hiding tampering on the file system from the scanner by modifying these files.
+
+          \item Verify that the installation was successful by calling Tripwire.
+
+                \begin{minted}{text}
+                  $ sudo tripwire --version
+                \end{minted}
+
+                This should print some version information of the tripwire build.
+
+        \end{enumerate}
+\end{enumerate}
+
+Building software from source can be considered more secure than using pre-built binaries, since binaries downloaded from the internet may have malicious alterations.
+When building from source, the source code can be inspected and the build result should be pure.
+However this is not guaranteed, since the build tools themselves may be compromised and inject malicious code into the build result.
+
+One way to ensure that the build of a piece of software has not been tampered with, is by employing cryptography.
+The provider of a piece of software may also provide pre-built binaries.
+To give the user the ability to verify that the binaries have not been tampered with, the provider may calculate a cryptographically secure checksum (e.~g. SHA-256) for the binary and provide it alongside it.
+This way, the user can download the binary, calculate the checksum themselves and compare it to the one from the provider.
+Thereby, they can ensure that the binary has not been modified.
+
+The package management systems of most Linux distributions like apt use checksumming for this reason.
+The repositories not only contain software distributions but also checksums and the clients automatically compute checksums for downloaded software packages and compare them against the ones from the repository.
+\parencite{debian_wiki_secureapt_nodate}
+
+Checksumming of software distributions safeguards against tampering in transport.
+However, the user still has to trust the provider that they did not include malicious code in the binary in the first place.
+
+\section{First Steps With Tripwire}
+
+\subsection{Configure Tripwire}
+
+After we have installed Tripwire, we can now configure and use it.
+The \texttt{make install} command has already created a default policy in \enquote{/usr/local/etc/twpol.txt} which covers all of the most important file locations already.
+Among others, Tripwire's own binaries and configuration files, global configuration files in \enquote{/etc}, OS and user installed binaries and libraries and the system's boot files.
+
+It also includes \enquote{/home} where the system's user's home directories reside.
+While this is a point where malicious software is likely to first enter the system, these directories should also see a large amount of regular activity.
+Therefore, we may decide to exclude home directories from our scans, to not have to deal with too much noise when evaluating against our snapshot later.
+
+Let us exclude \enquote{/home} from our scans by changing the policy file as follows:
+
+\begin{minted}{diff}
+  (
+    rulename = "Monitor Filesystems",
+  )
+  {
+    /                             -> $(SEC_READONLY) ;
+  -  /home                         -> $(SEC_READONLY) ;  # Modify as needed
+  +  #/home                         -> $(SEC_READONLY) ;
+    /usr                          -> $(SEC_READONLY) ;
+    /var                          -> $(SEC_READONLY) ;
+  }
+\end{minted}
+
+Then update the policy for Tripwire.
+
+\begin{minted}{text}
+  $ sudo tripwire --update-policy /usr/local/etc/twpol.txt
+\end{minted}
+
+The command will update the policy, re-scan the file system and update the database.
+If it detects changes to the file system since the last scan it will fail.
+This can be prevented by adding the option \texttt{--secure-mode low}.
+
+\subsection{Simulate and Detect an Attack}
+
+Let's simulate an attack where the attacker has somehow injected malicious code to the system program \enquote{mv}.
+
+\begin{itemize}
+  \item Create a backup of the \enquote{mv} command.
+
+        \begin{minted}{text}
+          $ cp /usr/bin/mv .
+          $ mv mv mv-backup
+        \end{minted}
+
+  \item Simulate injecting malicious code by appending some text to the binary.
+
+        \begin{minted}{text}
+          $ sudo -iu root
+          $ echo "println all-your-data" >> /usr/bin/mv
+          $ exit
+        \end{minted}
+
+        You can check that the binary has actually been changed by manually computing and comparing the SHA-256 checksums of the backup and the changed binary.
+
+        \begin{minted}{text}
+          $ sha256sum mv-backup
+          $ sha256sum /usr/bin/mv
+        \end{minted}
+
+  \item Check the file system with Tripwire.
+
+        \begin{minted}{text}
+          $ sudo tripwire --check \
+            | tee tripwire-report.txt \ # for later reference
+            | less                      # for easier reading
+        \end{minted}
+
+        The report shows that the binary was modified.
+
+        \begin{minted}{text}
+          ------------------------------------------------------
+          Rule Name: OS Binaries and Libraries (/usr/bin)
+          Severity Level: 0
+          ------------------------------------------------------
+
+          Added:
+          "/usr/bin/mv"
+
+          Modified:
+          "/usr/bin"
+        \end{minted}
+
+\end{itemize}
+
+For Tripwire to be effective it is paramount that its configuration files and data base are protected against tampering.
+The most basic way to do this is to ensure the correct access permissions on these files.
+Furthermore, Tripwire supports cryptographically signing these files to be able to detect any tampering.
+This process is built into the install script.
+
+\section{An Actual Attack}
+
+In this exercise we install Tripwire on a third machine and infect it with an actual rootkit.
+
+\begin{enumerate}
+  \item Install Tripwire as described in \ref{sec:installation}.
+  \item Initialize the database.
+
+        \begin{minted}{text}
+          $ sudo tripwire --init
+        \end{minted}
+
+  \item Copy the rootkit to the onto the virtual machine.
+
+        \begin{minted}{text}
+          $ rsync -av lilly sieverding-2:/home/ubuntu/.ssh/.lilly
+        \end{minted}
+
+  \item Build the rootkit.
+
+        \begin{minted}{text}
+          $ cd /home/ubuntu/.ssh/.lilly
+          $ make
+        \end{minted}
+
+  \item Infect the machine.
+
+        \begin{minted}{text}
+          $ sudo insmod lilyofthevalley.ko
+        \end{minted}
+
+  \item Build the client to use the rootkit.
+
+        \begin{minted}{text}
+          $ make client
+        \end{minted}
+
+  \item You can then use the client to elevate yourself to root.
+
+        \begin{minted}{text}
+          # Without any options this will drop you into a root shell
+          $ ./client
+        \end{minted}
+
+\end{enumerate}
+
+Once the rootkit is installed it hides itself from other programs by hiding all files that start with \enquote{lilyofthevalley}.
+The most likely way to detect the rootkit would be to find the installation files and/or the client in the user's home directory.
+The installation files may be deleted after the system has been infected, but an attacker probably wants to keep the client for easy use of the rootkit.
+This client could be hidden by moving it to a location on the filesystem that is hidden by the rootkit.
+
+\begin{enumerate}
+  \item Open a root shell.
+
+        \begin{minted}{text}
+          $ /home/ubuntu/.ssh/.lilly/client
+        \end{minted}
+
+  \item Move the client to a system location so that it is not accidentally deleted by a user and rename it so that it is hidden.
+
+        \begin{minted}{text}
+          $ mv /home/ubuntu/.ssh/.lilly/client /etc/lilyofthevalley-client
+        \end{minted}
+
+  \item Cover your tracks.
+
+        \begin{minted}{text}
+          $ rm -rf /home/ubuntu/.ssh/.lilly
+          $ exit # exit the root shell
+        \end{minted}
+
+  \item Use the client, because you know where it is.
+
+        \begin{minted}{text}
+          $ /etc/lilyofthevalley-client
+        \end{minted}
+
+\end{enumerate}

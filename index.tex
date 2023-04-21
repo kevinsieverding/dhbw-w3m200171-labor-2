@@ -13,9 +13,10 @@
 
 % DOCUMENT METADATA
 
-\author{Guybrush Threepwood}
-\title{Seasonality of Leather Jacket Demand}
-\subject{Market Report}
+\author{Kevin Sieverding}
+\title{Labor II}
+\subject{Laborbericht}
+\date{2023-04-21}
 
 % PREAMBLE
 
@@ -36,7 +37,7 @@
 % setup acronyms
 \input{preamble/acronyms.tex}
 
-\makenoidxglossaries{}
+% \makenoidxglossaries{}
 
 % setup bibliography
 \addbibresource{assets/bibliography.bib}
@@ -54,43 +55,43 @@
 
 \clearpage
 
-% use roman page numerals to number frontmatter pages
-\pagenumbering{Roman}
+% % use roman page numerals to number frontmatter pages
+% \pagenumbering{Roman}
 
-% use plain headers
-\pagestyle{plain.scrheadings}
+% % use plain headers
+% \pagestyle{plain.scrheadings}
 
-% start numbering pages at 2, to include cover page
-\setcounter{page}{2}
+% % start numbering pages at 2, to include cover page
+% \setcounter{page}{2}
 
-% use single line spacing to make lists more compact
-\singlespacing
+% % use single line spacing to make lists more compact
+% \singlespacing
 
-\tableofcontents
+% \tableofcontents
 
-\clearpage
+% \clearpage
 
-\listoffigures
+% \listoffigures
 
-\clearpage
+% \clearpage
 
-% use to change the title of the list of listings
-% \renewcommand{\listoflistingscaption}{Quellcodeverzeichnis}
-\listoflistings
+% % use to change the title of the list of listings
+% % \renewcommand{\listoflistingscaption}{Quellcodeverzeichnis}
+% \listoflistings
 
-\clearpage
+% \clearpage
 
-\setlist[description]{leftmargin=!, labelwidth=4em}
+% \setlist[description]{leftmargin=!, labelwidth=4em}
 
-\printnoidxglossary[
-    type=\acronymtype,
-    sort=nocase,
-    nogroupskip,
-    nopostdot,
-    nonumberlist
-]
+% \printnoidxglossary[
+%     type=\acronymtype,
+%     sort=nocase,
+%     nogroupskip,
+%     nopostdot,
+%     nonumberlist
+% ]
 
-\setlist[description]{style=standard}
+% \setlist[description]{style=standard}
 
 \newcounter{frontpagecount}
 \addtocounter{frontpagecount}{\value{page}}
